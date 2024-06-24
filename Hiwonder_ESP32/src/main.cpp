@@ -41,63 +41,40 @@ const char* password = "12345678";
 
 bool LED_status = true;
 
-
-char hello[13] = "hello world!";
-
-
 // ROS node handler
 ros::NodeHandle nh;
 
-std_msgs::String str_msg;
-std_msgs::UInt16 servo1_pos_msg;
 sensor_msgs::JointState servo_position_array_msg;
 // std_msgs::Float32MultiArray float32_array_msg;
 
 // servo_position_array_msg Jointstate message components 
-char *name[] = {"Servo_1", "Servo_2", "Servo_3", "Servo_4", "Servo_5", "Servo_6"};
+char *name[] = {"xarm_1_joint", "xarm_2_joint", "xarm_3_joint", "xarm_4_joint", "xarm_5_joint", "xarm_6_joint"};
 
 float pos[] = {0, 0, 0, 0, 0, 0};
 
+int pos_offset[] = {0, 0, 0, 0, 0, 0};
 
 uint16_t pos1_test = 123; // just for testing
 
-// ROS publishers
-ros::Publisher chatter("chatter", &str_msg); 							// to check if serial is working
+// ROS publishers							// to check if serial is working
 ros::Publisher servo_pos_pub("servo_positions", &servo_position_array_msg);	// servo positions publisher
 // ros::Publisher servo1_pos_pub("servo1_position", &servo1_pos_msg);
 
 // Callbacks
-void servo_callback(const std_msgs::Int16MultiArray& cmd_msg) {
-	str_msg.data = hello;
-	chatter.publish( &str_msg );
+void servo_callback(const sensor_msgs::JointState& cmd_msg) {
 
-	int servo_num = cmd_msg.data[0];
-	int servo_move_pos = cmd_msg.data[1];
+	float servo_move_pos[] = cmd_msg.position;
+	float servo_move_speed[] = cmd_msg.velocity;
 
-	if (servo_num == 1) {
-		servo1.move_time(servo_move_pos, 1500);
-	}
-	else if (servo_num == 2) {
-		servo2.move_time(servo_move_pos, 1500);
-	}
-	else if (servo_num == 3) {
-		servo3.move_time(servo_move_pos, 1500);
-	}
-	else if (servo_num == 4) {
-		servo4.move_time(servo_move_pos, 1500);
-	}
-	else if (servo_num == 5) {
-		servo5.move_time(servo_move_pos, 1500);
-	}
-	else if(servo_num == 6) {
-		servo6.move_time(servo_move_pos, 1500);
-	}
-	else {
-		digitalWrite(LED_BUILTIN, LOW);
-		delay(3000);
-		digitalWrite(LED_BUILTIN,HIGH);
-	}
-
+	servo1.move_time(servo_move_pos, 1500);
+	servo2.move_time(servo_move_pos, 1500);
+	servo3.move_time(servo_move_pos, 1500);
+	servo4.move_time(servo_move_pos, 1500);
+	servo5.move_time(servo_move_pos, 1500);
+	// digitalWrite(LED_BUILTIN, LOW);
+	// delay(3000);
+	// digitalWrite(LED_BUILTIN,HIGH);
+	
 	// servo6.move_time(servo_move_pos, 3000);
 	delay(2000);
 	// servo6.move_time(24000, 3000);
@@ -109,7 +86,7 @@ void servo_callback(const std_msgs::Int16MultiArray& cmd_msg) {
 
 // ROS Subscribers
 // ros::Subscriber<std_msgs::UInt16> sub_servo("servo", servo_callback);
-ros::Subscriber<std_msgs::Int16MultiArray> sub_servo("servo", servo_callback);
+ros::Subscriber<sensor_msgs::JointState> sub_servo("servo", servo_callback);
 
 
 void setup() {
@@ -120,7 +97,6 @@ void setup() {
 	
 
 	// Publishers (advertise)
-	nh.advertise(chatter);
 	nh.advertise(servo_pos_pub);
 	// nh.advertise(servo1_pos_pub);
 

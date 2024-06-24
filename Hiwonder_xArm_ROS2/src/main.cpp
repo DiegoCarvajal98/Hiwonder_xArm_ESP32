@@ -1,8 +1,13 @@
+#define _USE_MATH_DEFINES
+
+#include <math.h>
+
 #include <Arduino.h>
 #include <lx16a-servo.h>
 #include <WiFi.h>
 #include <iostream>
 #include <string>
+#include <vector>
 
 // ROS Includes
 #include <micro_ros_platformio.h>
@@ -53,8 +58,10 @@ int16_t temp_cached[6] = {0,0,0,0,0,0};
 
 // Array to populate JointState message for Servo positions
 double pos[6] = {0, 0, 0, 0, 0, 0};				// servo positions
+double rad_pos = {0, 0, 0, 0, 0, 0};
 double effort_array[] = {0, 0, 0, 0, 0, 0};		// effort array (just needed to populate message component)
 double vel[] = {0, 0, 0, 0, 0, 0};				// velocity array "  "
+double rad_vel = {0, 0, 0, 0, 0, 0};
 
 // Timer settings
 static const uint16_t timer_divider = 80;
@@ -201,34 +208,54 @@ void IRAM_ATTR onTimer2() {
 // 	}
 // }
 
+std::vector<int> rad_to_centideg(double * rad_pos)
+{
+	int arr_size = sizeof(rad_pos)/sizeof(double);
+
+	int deg_pos[arr_size];
+
+	for (int i=0; i<arr_size; i++){
+		deg_pos[i] = static_cast<int>(rad_pos[i] * 18000 / M_PI);
+	}
+
+	return deg_pos
+}
+
+std::vector<double> cent_to_rad(int * deg_pos)
+{
+	int arr_size = sizeof(deg_pos)/sizeof(double);
+
+	double rad_pos[arr_size];
+
+	for (int i=0; i<arr_size; i++){
+		rad_pos[i] = static_cast<double>(deg_pos[i]) * M_PI / 18000;
+	}
+
+	return rad_pos
+}
+
 // Subscriber callback for commanding multi servo
 void subscription_callback_multi_servo(const void * msgin) {
 	// Move all the servos (dont move if argument is negative)
-	const std_msgs__msg__Int16MultiArray * multi_servo = (const std_msgs__msg__Int16MultiArray *)msgin;
+	const sensor_msgs__msg__JointState * multi_servo = (const sensor_msgs__msg__JointState *)msgin;
 
-	if (multi_servo->data.data[0] >= 0) {
-		servo1.move_time(multi_servo->data.data[0], multi_servo->data.data[6]);
-	}
+	const float position_cmd[] = multi_servo->position;
+	const float velocity_cmd[] = multi_servo->velocity;
 
-	if (multi_servo->data.data[1] >= 0) {
-		servo2.move_time(multi_servo->data.data[1], multi_servo->data.data[7]);
-	}
+	int pos_deg_cmd = rad_to_centideg(position_cmd);
+	int vel_deg_cmd = rad_to_centideg(velocity_cmd);
 
-	if (multi_servo->data.data[2] >= 0) {
-		servo3.move_time(multi_servo->data.data[2], multi_servo->data.data[8]);
-	}
+	servo1.move_time(pos_deg_cmd[0], vel_deg_cmd[0]);
+
+	servo2.move_time(pos_deg_cmd[1], vel_deg_cmd[1]);
+
+	servo3.move_time(pos_deg_cmd[2], vel_deg_cmd[2]);
 	
-	if (multi_servo->data.data[3] >= 0) {
-		servo4.move_time(multi_servo->data.data[3], multi_servo->data.data[9]);
-	}
+	servo4.move_time(pos_deg_cmd[3], vel_deg_cmd[3]);
 
-	if (multi_servo->data.data[4] >= 0) {
-		servo5.move_time(multi_servo->data.data[4], multi_servo->data.data[10]);
-	}
+	servo5.move_time(pos_deg_cmd[4], vel_deg_cmd[4]);
 
-	if (multi_servo->data.data[5] >= 0) {
-		servo6.move_time(multi_servo->data.data[5], multi_servo->data.data[11]);
-	}
+	servo6.move_time(pos_deg_cmd[5], vel_deg_cmd[5]);
 
 	// digitalWrite(LED_BUILTIN, LOW);
 	// delay(200);
@@ -249,7 +276,7 @@ bool create_entities(){
 
 	allocator = rcl_get_default_allocator();			// Initialize micro-ROS allocator
 	RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));					// Initialize support options
-  	RCCHECK(rclc_node_init_default(&node_hiwonder, "Hiwonder_xArm_node", "", &support)); // create node
+  	RCCHECK(rclc_node_init_default(&node_hiwonder, "xarm_node", "", &support)); // create node
 
 	// =====================================================================================================
     // PUBLISHERS
@@ -284,7 +311,7 @@ bool create_entities(){
 	RCCHECK(rclc_subscription_init_default(
 		&subscriber_multi_servo_cmd, 
 		&node_hiwonder, 
-		ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int16MultiArray), 
+		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState), 
 		"multi_servo_cmd_sub"));
 	
 	// =====================================================================================================
@@ -369,7 +396,7 @@ void setup() {
 	servoBus.retry=3;
 
 	// Reset the servo positions
-	servo1.move_time(16000,1000);
+	servo1.move_time(3000,1000);
 	servo2.move_time(12000,1250);
 	servo3.move_time(12000,1500);
 	servo4.move_time(12000,2000);
@@ -468,19 +495,19 @@ void setup() {
 
 	bool success = rosidl_runtime_c__String__Sequence__init(&name__string_sequence, 6);
 	servo_position_array_msg.name = name__string_sequence;
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[0], "Servo1", 6);
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[1], "Servo2", 6);
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[2], "Servo3", 6);
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[3], "Servo4", 6);
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[4], "Servo5", 6);
-	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[5], "Servo6", 6);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[0], "xarm_1_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[1], "xarm_2_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[2], "xarm_3_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[3], "xarm_4_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[4], "xarm_5_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&servo_position_array_msg.name.data[5], "xarm_6_joint", 12);
 
 
 	// Assigning dynamic memory to POSITION rosidl_runtime_c__double__Sequence 
 	servo_position_array_msg.position.capacity = 6;
 	servo_position_array_msg.position.size = 6;
 	servo_position_array_msg.position.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
-	servo_position_array_msg.position.data = pos; 
+	servo_position_array_msg.position.data = rad_pos; 
 
 	// Assigning dynamic memory to EFFORT rosidl_runtime_c__double__Sequence 
 	servo_position_array_msg.effort.capacity = 6;
@@ -488,11 +515,11 @@ void setup() {
 	servo_position_array_msg.effort.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
 	servo_position_array_msg.effort.data = effort_array;
 
-	// Assigning dynamic memory to EFFORT rosidl_runtime_c__double__Sequence 
+	// Assigning dynamic memory to VELOCITY rosidl_runtime_c__double__Sequence 
 	servo_position_array_msg.velocity.capacity = 6;
 	servo_position_array_msg.velocity.size = 6;
 	servo_position_array_msg.velocity.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
-	servo_position_array_msg.velocity.data = vel;
+	servo_position_array_msg.velocity.data = rad_vel;
 
 	// header
 	// Assigning dynamic memory to the frame_id char sequence
@@ -526,19 +553,34 @@ void setup() {
 
 
 	// (3) multi_servo_cmd_msg
-	multi_servo_cmd_msg_in.data.capacity = 12;
-	multi_servo_cmd_msg_in.data.size = 0;
-  	multi_servo_cmd_msg_in.data.data = (int16_t*) malloc(single_servo_cmd_msg_in.data.capacity * sizeof(int16_t));
 
-	multi_servo_cmd_msg_in.layout.dim.capacity = 3;
-	multi_servo_cmd_msg_in.layout.dim.size = 0;
-	multi_servo_cmd_msg_in.layout.dim.data = (std_msgs__msg__MultiArrayDimension*) malloc(multi_servo_cmd_msg_in.layout.dim.capacity * sizeof(std_msgs__msg__MultiArrayDimension));
+	bool success = rosidl_runtime_c__String__Sequence__init(&mname__string_sequence, 6);
+	multi_servo_cmd_msg_in.name = mname__string_sequence;
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[0], "xarm_1_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[1], "xarm_2_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[2], "xarm_3_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[3], "xarm_4_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[4], "xarm_5_joint", 12);
+	success = rosidl_runtime_c__String__assignn(&multi_servo_cmd_msg_in.name.data[5], "xarm_6_joint", 12);
 
-	for(size_t i = 0; i < multi_servo_cmd_msg_in.layout.dim.capacity; i++){
-		multi_servo_cmd_msg_in.layout.dim.data[i].label.capacity = 10;
-		multi_servo_cmd_msg_in.layout.dim.data[i].label.size = 0;
-		multi_servo_cmd_msg_in.layout.dim.data[i].label.data = (char*) malloc(multi_servo_cmd_msg_in.layout.dim.data[i].label.capacity * sizeof(char));
-	}
+
+	// Assigning dynamic memory to POSITION rosidl_runtime_c__double__Sequence 
+	multi_servo_cmd_msg_in.position.capacity = 6;
+	multi_servo_cmd_msg_in.position.size = 6;
+	multi_servo_cmd_msg_in.position.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
+	multi_servo_cmd_msg_in.position.data = pos; 
+
+	// Assigning dynamic memory to EFFORT rosidl_runtime_c__double__Sequence 
+	multi_servo_cmd_msg_in.effort.capacity = 6;
+	multi_servo_cmd_msg_in.effort.size = 6;
+	multi_servo_cmd_msg_in.effort.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
+	multi_servo_cmd_msg_in.effort.data = effort_array;
+
+	// Assigning dynamic memory to VELOCITY rosidl_runtime_c__double__Sequence 
+	multi_servo_cmd_msg_in.velocity.capacity = 6;
+	multi_servo_cmd_msg_in.velocity.size = 6;
+	multi_servo_cmd_msg_in.velocity.data = (double*) malloc(servo_position_array_msg.position.capacity * sizeof(double));
+	multi_servo_cmd_msg_in.velocity.data = vel;
 
 
 	// (4) servo_voltages_msg
@@ -615,11 +657,13 @@ void loop() {
 
 					effort_array[0]++;
 
+					rad_pos = cent_to_rad(pos);
+					rad_vel = cent_to_rad(vel);
 
 					// Update servo_position_array_msg
-					servo_position_array_msg.position.data = pos;
+					servo_position_array_msg.position.data = rad_pos;
 					servo_position_array_msg.effort.data = effort_array;
-					servo_position_array_msg.velocity.data = vel;
+					servo_position_array_msg.velocity.data = rad_vel;
 					servo_position_array_msg.header.stamp.sec = (uint16_t)(rmw_uros_epoch_millis()/1000); 	// timestamp
 					servo_position_array_msg.header.stamp.nanosec = (uint32_t)rmw_uros_epoch_nanos();		// timestamp
 
